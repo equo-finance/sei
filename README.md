@@ -1,66 +1,38 @@
-## Foundry
+# Equo Finance
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+## Introduction
 
-Foundry consists of:
+Equo Finance is a liquid staking protocol for the Sei ecosystem. The goal is to offer a strong alternative to existing solutions, giving users more choices to liquid stake their SEI tokens.
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+## Getting Started
 
-## Documentation
+To get started with Equo Finance, follow these steps:
 
-https://book.getfoundry.sh/
+1. **Clone the repository:**
 
-## Usage
+    ```bash
+    git clone https://github.com/equo-finance/sei.git
+    cd sei
+    ```
 
-### Build
+2. **Install dependencies:**
+   Ensure you have [Foundry](https://getfoundry.sh/) installed. Then, run:
 
-```shell
-$ forge build
-```
+    ```bash
+    forge install
+    ```
 
-### Test
+3. **Compile the contracts:**
 
-```shell
-$ forge test
-```
+    ```bash
+    forge build
+    ```
 
-### Format
+4. **Run tests:**
+    ```bash
+    forge test
+    ```
 
-```shell
-$ forge fmt
-```
+## Contributing
 
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+Contributions are welcome! Feel free to open an issue or submit a pull request.
