@@ -36,7 +36,6 @@ contract EqSei is ERC20, Ownable {
 
     /**
      * @notice This function burns the $EQSEI and reduces the total supply of $EQSEI.
-     * @dev the burn will happen when user withdraws $SEI from liquid staking contract and not when they put undelegate request.
      * @param account address of user burning $EQSEI
      * @param value amount of $EQSEI to burn
      */

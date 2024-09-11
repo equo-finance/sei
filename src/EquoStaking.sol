@@ -6,6 +6,7 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {DISTR_CONTRACT} from "src/interfaces/IDistribution.sol";
 import {STAKING_CONTRACT} from "src/interfaces/IStaking.sol";
 
+import {EqSei} from "src/EqSei.sol";
 
 contract EquoStaking is AccessControl {
     /*//////////////////////////////////////////////////////////////
@@ -13,6 +14,10 @@ contract EquoStaking is AccessControl {
     //////////////////////////////////////////////////////////////*/
 
     error EquoStaking__LessThanMinimumAmount();
+    error EquoStaking__InsufficientAmountToUnstake();
+    error EquoStaking__RequestIndexOutOfBound();
+    error EquoStaking__UnboundingPeriodNotFinished(uint256 timeRemaining);
+    error EquoStaking__SeiTransferWhileWithdrawFailed();
 
     error EquoStaking__MismatchInArrayLength();
     error EquoStaking__DelegationFailed();
@@ -35,24 +40,87 @@ contract EquoStaking is AccessControl {
     /*//////////////////////////////////////////////////////////////
                             STATE VARIABLES
     //////////////////////////////////////////////////////////////*/
-    uint256 public constant MINIMUM_AMOUNT_TO_STAKE = 0.5 ether;
 
-    bytes32 public constant DELEGATOR = keccak256("DELEGATOR");
+    struct UndelegationRequest {
+        uint256 exchangeRate;
+        uint256 eqSeiAmount;
+        uint256 requestTimestamp;
+    }
+
+    EqSei private eqSei;
+
+    uint256 private constant UNBOUNDING_PERIOD = 21 days;
+    uint256 private constant UNBOUNDING_BUFFER = 2 hours;
+
+    uint256 private constant STARTING_EXCHANGE_RATE = 1e18;
+    uint256 private constant MINIMUM_AMOUNT_TO_STAKE = 0.5 ether;
+    bytes32 private constant DELEGATOR = keccak256("DELEGATOR");
+
+    mapping(address => UndelegationRequest[]) private undelegationRequests;
+
     /*//////////////////////////////////////////////////////////////
                                FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    constructor(address multiSigAddress) {
+    constructor(address multiSigAddress, address tokenAddress) {
         _grantRole(DEFAULT_ADMIN_ROLE, multiSigAddress);
+        eqSei = EqSei(tokenAddress);
     }
 
     /*//////////////////////////////////////////////////////////////
                            EXTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    function stake() external payable {}
-    function unstake() external {}
-    function withdraw() external {}
+    function stake() external payable {
+        if (msg.value < MINIMUM_AMOUNT_TO_STAKE) {
+            revert EquoStaking__LessThanMinimumAmount();
+        }
+
+        uint256 tokenMintAmount = msg.value * _getExchangeRate();
+
+        eqSei.mint(msg.sender, tokenMintAmount);
+    }
+
+    function unstake(uint256 amount) external {
+        if (eqSei.balanceOf(msg.sender) <= amount) {
+            revert EquoStaking__InsufficientAmountToUnstake();
+        }
+
+        undelegationRequests[msg.sender].push(
+            UndelegationRequest({
+                exchangeRate: _getExchangeRate(),
+                eqSeiAmount: amount,
+                requestTimestamp: block.timestamp
+            })
+        );
+
+        eqSei.burn(msg.sender, amount);
+    }
+
+    function withdraw(uint256 requestIndex) external {
+        uint256 requestsLength = undelegationRequests[msg.sender].length;
+        if (requestsLength < requestIndex) {
+            revert EquoStaking__RequestIndexOutOfBound();
+        }
+
+        UndelegationRequest memory request = undelegationRequests[msg.sender][requestIndex];
+
+        if (checkIfUnboundingFinished(request.requestTimestamp)) {
+            revert EquoStaking__UnboundingPeriodNotFinished(
+                (request.requestTimestamp + UNBOUNDING_PERIOD + UNBOUNDING_BUFFER) - block.timestamp
+            );
+        }
+
+        (bool success, /*bytes memory dataReturned*/ ) =
+            payable(msg.sender).call{value: (request.eqSeiAmount / request.exchangeRate)}("");
+
+        if (!success) {
+            revert EquoStaking__SeiTransferWhileWithdrawFailed();
+        }
+
+        undelegationRequests[msg.sender][requestIndex] = undelegationRequests[msg.sender][requestsLength - 1];
+        undelegationRequests[msg.sender].pop();
+    }
 
     /*//////////////////////////////////////////////////////////////
                           DELEGATOR FUNCTIONS
@@ -178,7 +246,28 @@ contract EquoStaking is AccessControl {
                     INTERNAL/PRIVATE VIEW FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    function _getExchangeRate() internal view returns (uint256) {}
+    function _getExchangeRate() internal view returns (uint256) {
+        uint256 totalSupply = eqSei.totalSupply();
+
+        if(totalSupply == 0) {
+            return STARTING_EXCHANGE_RATE;
+        } else {
+            // logic in progress
+            return 1e18;
+        }
+    }
+
+    function getTotalDelegatedAmount() internal view returns(uint256) {
+        
+    }
+
+    function checkIfUnboundingFinished(uint256 requestTimestamp) internal view returns (bool) {
+        if (block.timestamp > requestTimestamp + UNBOUNDING_PERIOD + UNBOUNDING_BUFFER) {
+            return false;
+        } else {
+            return true;
+        }
+    }
 
     /*//////////////////////////////////////////////////////////////
                      PUBLIC/EXTERNAL VIEW FUNCTIONS

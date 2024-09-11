@@ -36,3 +36,9 @@ To get started with Equo Finance, follow these steps:
 ## Contributing
 
 Contributions are welcome! Feel free to open an issue or submit a pull request.
+
+## Todo
+
+-   [ ] Validator storage logic - I can maintain this in contract or other way is to get list of validators through distribution contract which allows to get list of validators where reward is generated.
+-   [ ] Work on logic of exchange rate
+-   [ ] start writing unit tests and scripts
