@@ -2,13 +2,14 @@
 pragma solidity 0.8.24;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import {DISTR_CONTRACT} from "src/interfaces/IDistribution.sol";
 import {STAKING_CONTRACT} from "src/interfaces/IStaking.sol";
 
 import {EqSei} from "src/EqSei.sol";
 
-contract EquoStaking is AccessControl {
+contract EquoStaking is AccessControl, ReentrancyGuard {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
@@ -71,7 +72,7 @@ contract EquoStaking is AccessControl {
                            EXTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    function stake() external payable {
+    function stake() external payable nonReentrant {
         if (msg.value < MINIMUM_AMOUNT_TO_STAKE) {
             revert EquoStaking__LessThanMinimumAmount();
         }
@@ -81,7 +82,7 @@ contract EquoStaking is AccessControl {
         eqSei.mint(msg.sender, tokenMintAmount);
     }
 
-    function unstake(uint256 amount) external {
+    function unstake(uint256 amount) external nonReentrant {
         if (eqSei.balanceOf(msg.sender) <= amount) {
             revert EquoStaking__InsufficientAmountToUnstake();
         }
@@ -97,7 +98,7 @@ contract EquoStaking is AccessControl {
         eqSei.burn(msg.sender, amount);
     }
 
-    function withdraw(uint256 requestIndex) external {
+    function withdraw(uint256 requestIndex) external nonReentrant {
         uint256 requestsLength = undelegationRequests[msg.sender].length;
         if (requestsLength < requestIndex) {
             revert EquoStaking__RequestIndexOutOfBound();
@@ -111,15 +112,15 @@ contract EquoStaking is AccessControl {
             );
         }
 
+        undelegationRequests[msg.sender][requestIndex] = undelegationRequests[msg.sender][requestsLength - 1];
+        undelegationRequests[msg.sender].pop();
+
         (bool success, /*bytes memory dataReturned*/ ) =
             payable(msg.sender).call{value: (request.eqSeiAmount / request.exchangeRate)}("");
 
         if (!success) {
             revert EquoStaking__SeiTransferWhileWithdrawFailed();
         }
-
-        undelegationRequests[msg.sender][requestIndex] = undelegationRequests[msg.sender][requestsLength - 1];
-        undelegationRequests[msg.sender].pop();
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -249,7 +250,7 @@ contract EquoStaking is AccessControl {
     function _getExchangeRate() internal view returns (uint256) {
         uint256 totalSupply = eqSei.totalSupply();
 
-        if(totalSupply == 0) {
+        if (totalSupply == 0) {
             return STARTING_EXCHANGE_RATE;
         } else {
             // logic in progress
@@ -257,9 +258,7 @@ contract EquoStaking is AccessControl {
         }
     }
 
-    function getTotalDelegatedAmount() internal view returns(uint256) {
-        
-    }
+    function getTotalDelegatedAmount() internal view returns (uint256) {}
 
     function checkIfUnboundingFinished(uint256 requestTimestamp) internal view returns (bool) {
         if (block.timestamp > requestTimestamp + UNBOUNDING_PERIOD + UNBOUNDING_BUFFER) {
