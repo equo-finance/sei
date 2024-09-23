@@ -4,8 +4,8 @@ pragma solidity 0.8.24;
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-import {DISTR_CONTRACT} from "src/interfaces/IDistribution.sol";
-import {STAKING_CONTRACT} from "src/interfaces/IStaking.sol";
+import {DISTR_CONTRACT, IDistr} from "src/interfaces/IDistribution.sol";
+import {STAKING_CONTRACT, IStaking} from "src/interfaces/IStaking.sol";
 
 import {EqSei} from "src/EqSei.sol";
 
@@ -54,6 +54,7 @@ contract EquoStaking is AccessControl, ReentrancyGuard {
     uint256 private constant UNBOUNDING_BUFFER = 2 hours;
 
     uint256 private constant STARTING_EXCHANGE_RATE = 1e18;
+    uint256 private constant EXCHANGE_RATE_DECIMAL = 1e18;
     uint256 private constant MINIMUM_AMOUNT_TO_STAKE = 0.5 ether;
     bytes32 private constant DELEGATOR = keccak256("DELEGATOR");
 
@@ -106,7 +107,7 @@ contract EquoStaking is AccessControl, ReentrancyGuard {
 
         UndelegationRequest memory request = undelegationRequests[msg.sender][requestIndex];
 
-        if (checkIfUnboundingFinished(request.requestTimestamp)) {
+        if (_checkIfUnboundingFinished(request.requestTimestamp)) {
             revert EquoStaking__UnboundingPeriodNotFinished(
                 (request.requestTimestamp + UNBOUNDING_PERIOD + UNBOUNDING_BUFFER) - block.timestamp
             );
@@ -253,14 +254,32 @@ contract EquoStaking is AccessControl, ReentrancyGuard {
         if (totalSupply == 0) {
             return STARTING_EXCHANGE_RATE;
         } else {
-            // logic in progress
-            return 1e18;
+            uint256 exchangeRate = (_getTotalDelegatedAmount() * EXCHANGE_RATE_DECIMAL) / totalSupply;
+            return exchangeRate;
         }
     }
 
-    function getTotalDelegatedAmount() internal view returns (uint256) {}
+    function _getTotalDelegatedAmount() internal view returns (uint256) {
+        // Get rewards for the contract address (delegator)
+        IDistr.Rewards memory delegatorRewards = DISTR_CONTRACT.rewards(address(this));
 
-    function checkIfUnboundingFinished(uint256 requestTimestamp) internal view returns (bool) {
+        // Loop through each validator for which we have rewards
+        uint256 totalAmount = 0;
+        uint256 delegationList = delegatorRewards.rewards.length;
+        for (uint256 i = 0; i < delegationList; i++) {
+            string memory validator = delegatorRewards.rewards[i].validator_address;
+
+            // Get delegation details for the validator
+            IStaking.Delegation memory del = STAKING_CONTRACT.delegation(address(this), validator);
+
+            // Add the amount of delegation to the total
+            totalAmount += del.balance.amount;
+        }
+
+        return totalAmount;
+    }
+
+    function _checkIfUnboundingFinished(uint256 requestTimestamp) internal view returns (bool) {
         if (block.timestamp > requestTimestamp + UNBOUNDING_PERIOD + UNBOUNDING_BUFFER) {
             return false;
         } else {
@@ -272,5 +291,7 @@ contract EquoStaking is AccessControl, ReentrancyGuard {
                      PUBLIC/EXTERNAL VIEW FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    function getExchangeRate() public view returns (uint256) {}
+    function getExchangeRate() public view returns (uint256) {
+        return _getExchangeRate();
+    }
 }
